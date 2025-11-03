@@ -1,36 +1,36 @@
-import jwt from 'jsonwebtoken';
+import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { jwtConfig } from '../config/jwt';
-import { IUser } from '../types/user.types';
+import { IUser, UserRole } from '../types/user.types';
 
 interface TokenPayload {
   userId: string;
   email: string;
-  role: string;
+  role: UserRole;
 }
 
 export class TokenService {
   generateAccessToken(user: IUser): string {
     const payload: TokenPayload = {
-      userId: user._id.toString(),
+      userId: (user._id as any).toString(),
       email: user.email,
       role: user.role,
     };
 
     return jwt.sign(payload, jwtConfig.accessTokenSecret, {
       expiresIn: jwtConfig.accessTokenExpiresIn,
-    });
+    } as any);
   }
 
   generateRefreshToken(user: IUser): string {
     const payload: TokenPayload = {
-      userId: user._id.toString(),
+      userId: (user._id as any).toString(),
       email: user.email,
       role: user.role,
     };
 
     return jwt.sign(payload, jwtConfig.refreshTokenSecret, {
       expiresIn: jwtConfig.refreshTokenExpiresIn,
-    });
+    } as any);
   }
 
   verifyAccessToken(token: string): TokenPayload {

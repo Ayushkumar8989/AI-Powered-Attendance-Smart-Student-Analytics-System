@@ -10,7 +10,7 @@ import { IUser, IUserResponse, UserRole } from '../types/user.types';
 export class AuthService {
   private formatUserResponse(user: IUser): IUserResponse {
     return {
-      id: user._id.toString(),
+      id: (user._id as any).toString(),
       email: user.email,
       role: user.role,
       createdAt: user.createdAt.toISOString(),
