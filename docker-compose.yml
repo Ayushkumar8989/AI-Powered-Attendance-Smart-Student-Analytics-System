@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: deai-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: deai_synthetic_data
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - deai-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: deai-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongodb:27017/deai_synthetic_data
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_in_production_access}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_this_in_production_refresh}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      AI_ENGINE_URL: http://ai-engine:8000
+      CORS_ORIGIN: http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - deai-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    container_name: deai-ai-engine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: production
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: INFO
+    volumes:
+      - ai_models:/app/models
+      - ai_output:/app/output
+    networks:
+      - deai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: deai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: http://localhost:5000
+      VITE_AI_ENGINE_URL: http://localhost:8000
+    depends_on:
+      - backend
+      - ai-engine
+    networks:
+      - deai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  deai-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  ai_models:
+    driver: local
+  ai_output:
+    driver: local

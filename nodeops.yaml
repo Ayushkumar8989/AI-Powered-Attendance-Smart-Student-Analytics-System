@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: DeploymentConfig
+metadata:
+  name: deai-synthetic-data-generator
+  version: 1.0.0
+  description: DeAI Synthetic Data Generator - DePin Network Deployment
+
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  services:
+    - name: frontend
+      type: web
+      image: deai-frontend:latest
+      port: 80
+      replicas: 2
+      resources:
+        cpu: 500m
+        memory: 512Mi
+      healthCheck:
+        path: /health
+        interval: 30s
+        timeout: 5s
+        retries: 3
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+        targetCPUUtilization: 70
+
+    - name: backend
+      type: api
+      image: deai-backend:latest
+      port: 5000
+      replicas: 3
+      resources:
+        cpu: 1000m
+        memory: 1Gi
+      environment:
+        - name: NODE_ENV
+          value: production
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-credentials
+              key: connection-string
+        - name: JWT_ACCESS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secrets
+              key: access-token
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secrets
+              key: refresh-token
+      healthCheck:
+        path: /api/health
+        interval: 30s
+        timeout: 5s
+        retries: 3
+      autoscaling:
+        enabled: true
+        minReplicas: 3
+        maxReplicas: 10
+        targetCPUUtilization: 75
+
+    - name: ai-engine
+      type: compute
+      image: deai-ai-engine:latest
+      port: 8000
+      replicas: 2
+      resources:
+        cpu: 2000m
+        memory: 4Gi
+        gpu: 1
+      volumes:
+        - name: model-cache
+          mountPath: /app/models
+          size: 20Gi
+        - name: output-data
+          mountPath: /app/output
+          size: 50Gi
+      healthCheck:
+        path: /api/health
+        interval: 30s
+        timeout: 10s
+        retries: 3
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 8
+        targetCPUUtilization: 80
+        targetMemoryUtilization: 85
+
+    - name: mongodb
+      type: database
+      image: mongo:7.0
+      port: 27017
+      replicas: 1
+      resources:
+        cpu: 1000m
+        memory: 2Gi
+      volumes:
+        - name: mongodb-data
+          mountPath: /data/db
+          size: 100Gi
+      backup:
+        enabled: true
+        schedule: "0 2 * * *"
+        retention: 7
+
+network:
+  ingress:
+    enabled: true
+    class: nginx
+    rules:
+      - host: deai.example.com
+        paths:
+          - path: /
+            service: frontend
+            port: 80
+          - path: /api
+            service: backend
+            port: 5000
+          - path: /ai
+            service: ai-engine
+            port: 8000
+    tls:
+      enabled: true
+      secretName: deai-tls-cert
+
+  serviceMesh:
+    enabled: true
+    type: istio
+    mtls: strict
+
+monitoring:
+  prometheus:
+    enabled: true
+    scrapeInterval: 15s
+  grafana:
+    enabled: true
+    dashboards:
+      - name: application-metrics
+      - name: depin-network-stats
+  alerts:
+    - name: high-cpu-usage
+      condition: cpu > 85%
+      duration: 5m
+      severity: warning
+    - name: high-memory-usage
+      condition: memory > 90%
+      duration: 5m
+      severity: critical
+    - name: service-down
+      condition: healthcheck_failed
+      duration: 2m
+      severity: critical
+
+logging:
+  enabled: true
+  aggregator: fluentd
+  storage: elasticsearch
+  retention: 30d
+
+security:
+  networkPolicies:
+    enabled: true
+    ingressRules:
+      - from:
+          - podSelector:
+              matchLabels:
+                app: frontend
+        ports:
+          - protocol: TCP
+            port: 5000
+      - from:
+          - podSelector:
+              matchLabels:
+                app: backend
+        ports:
+          - protocol: TCP
+            port: 27017
+
+  podSecurityPolicy:
+    enabled: true
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+
+  secrets:
+    - name: mongodb-credentials
+      type: Opaque
+      data:
+        connection-string: <base64-encoded-value>
+    - name: jwt-secrets
+      type: Opaque
+      data:
+        access-token: <base64-encoded-value>
+        refresh-token: <base64-encoded-value>
+
+depin:
+  nodes:
+    preferred:
+      - region: us-west
+        count: 2
+      - region: us-east
+        count: 2
+      - region: eu-central
+        count: 1
+
+  resources:
+    compute:
+      distributed: true
+      replication: 3
+
+  consensus:
+    algorithm: proof-of-computation
+    validationInterval: 10m
+
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  retention: 14
+  storage:
+    type: s3
+    bucket: deai-backups
+    region: us-west-2
