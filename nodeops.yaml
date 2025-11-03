@@ -74,7 +74,7 @@ spec:
       type: compute
       image: deai-ai-engine:latest
       port: 8000
-      replicas: 2
+      replicas: 3
       resources:
         cpu: 2000m
         memory: 4Gi
@@ -86,6 +86,9 @@ spec:
         - name: output-data
           mountPath: /app/output
           size: 50Gi
+        - name: generated-data
+          mountPath: /tmp/generated_data
+          size: 100Gi
       healthCheck:
         path: /api/health
         interval: 30s
@@ -93,10 +96,26 @@ spec:
         retries: 3
       autoscaling:
         enabled: true
-        minReplicas: 2
-        maxReplicas: 8
+        minReplicas: 3
+        maxReplicas: 15
         targetCPUUtilization: 80
         targetMemoryUtilization: 85
+      distributedCompute:
+        enabled: true
+        taskQueue: redis
+        workerPool:
+          minWorkers: 3
+          maxWorkers: 20
+          scaleUpThreshold: 5
+          scaleDownThreshold: 1
+        chunkProcessing:
+          enabled: true
+          maxChunkSize: 10000
+          parallelChunks: 5
+        failover:
+          enabled: true
+          maxRetries: 3
+          redistributeOnFailure: true
 
     - name: mongodb
       type: database
@@ -208,20 +227,48 @@ depin:
   nodes:
     preferred:
       - region: us-west
-        count: 2
+        count: 3
       - region: us-east
-        count: 2
+        count: 3
       - region: eu-central
-        count: 1
+        count: 2
+      - region: asia-pacific
+        count: 2
 
   resources:
     compute:
       distributed: true
       replication: 3
+      loadBalancing: round-robin
 
   consensus:
     algorithm: proof-of-computation
     validationInterval: 10m
+
+  tasks:
+    - name: synthetic-data-generation
+      type: compute-intensive
+      priority: high
+      resources:
+        cpu: 2
+        memory: 4Gi
+        storage: 10Gi
+      scheduling:
+        strategy: distributed
+        maxNodesPerTask: 5
+        preferGPU: true
+      execution:
+        timeout: 3600
+        retryPolicy:
+          maxAttempts: 3
+          backoff: exponential
+        checkpointing:
+          enabled: true
+          interval: 300
+      dataDistribution:
+        sharding: automatic
+        replication: 2
+        consistency: eventual
 
 backup:
   enabled: true

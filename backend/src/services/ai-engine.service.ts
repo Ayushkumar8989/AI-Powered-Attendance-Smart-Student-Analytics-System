@@ -24,6 +24,20 @@ interface TrainingResponse {
   taskId: string;
 }
 
+interface GenerateDataRequest {
+  jobId: string;
+  modelId: string;
+  numberOfRows: number;
+  outputFormat: string;
+}
+
+interface GenerateDataResponse {
+  status: string;
+  taskId: string;
+  message: string;
+  estimatedTime?: number;
+}
+
 class AIEngineService {
   private client: AxiosInstance;
   private maxRetries = 3;
@@ -105,6 +119,42 @@ class AIEngineService {
       return response.data;
     } catch (error: any) {
       logger.error(`Failed to get job status for ${jobId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async generateData(request: GenerateDataRequest): Promise<GenerateDataResponse> {
+    let lastError: any;
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        logger.info(`Starting data generation (attempt ${attempt}/${this.maxRetries}) for job: ${request.jobId}`);
+
+        const response = await this.client.post<GenerateDataResponse>('/api/generate_data', request, {
+          timeout: 120000,
+        });
+
+        logger.info(`Data generation initiated successfully for job: ${request.jobId}`);
+        return response.data;
+      } catch (error: any) {
+        lastError = error;
+        logger.warn(`Generation initiation attempt ${attempt} failed: ${error.message}`);
+
+        if (attempt < this.maxRetries) {
+          await this.delay(this.retryDelay * attempt);
+        }
+      }
+    }
+
+    throw new Error(`Failed to start generation after ${this.maxRetries} attempts: ${lastError.message}`);
+  }
+
+  async getGenerationStatus(taskId: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/api/generation_status/${taskId}`);
+      return response.data;
+    } catch (error: any) {
+      logger.error(`Failed to get generation status for ${taskId}: ${error.message}`);
       throw error;
     }
   }

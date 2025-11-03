@@ -269,6 +269,14 @@ export const TrainingPage = () => {
             >
               Back to Dashboard
             </Button>
+            {job.status === 'completed' && (
+              <Button
+                onClick={() => navigate(`/generate/${job.jobId}`)}
+                className="flex-1"
+              >
+                Generate Synthetic Data
+              </Button>
+            )}
             {job.status === 'failed' && (
               <Button
                 onClick={() => navigate(`/analysis/${job.jobId}`)}

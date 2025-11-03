@@ -6,6 +6,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { UploadPage } from '@/pages/UploadPage';
 import { AnalysisPage } from '@/pages/AnalysisPage';
 import { TrainingPage } from '@/pages/TrainingPage';
+import { GenerationPage } from '@/pages/GenerationPage';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
 import { useAuthStore } from '@/store/auth.store';
@@ -51,6 +52,14 @@ function App() {
           element={
             <ProtectedRoute>
               <TrainingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/generate/:jobId"
+          element={
+            <ProtectedRoute>
+              <GenerationPage />
             </ProtectedRoute>
           }
         />

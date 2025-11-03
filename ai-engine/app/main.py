@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logger import logger
-from app.api import data_generation, model_training, dataset_processing
+from app.api import data_generation, model_training, dataset_processing, generate_data
 
 app = FastAPI(
     title="DeAI Synthetic Data Generator - AI Engine",
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(data_generation.router, prefix="/api")
 app.include_router(model_training.router, prefix="/api")
 app.include_router(dataset_processing.router, prefix="/api")
+app.include_router(generate_data.router, prefix="/api")
 
 
 @app.get("/")
